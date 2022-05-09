@@ -17,7 +17,7 @@ import tensorflow as tf
 import dnnlib
 import dnnlib.tflib as tflib
 from dnnlib.tflib.autosummary import autosummary
-
+import requests
 from training import dataset
 
 #----------------------------------------------------------------------------
@@ -293,23 +293,39 @@ def training_loop(
                 f"gpumem {autosummary('Resources/peak_gpu_mem_gb', peak_gpu_mem_op.eval() / 2**30):<5.1f}",
                 f"augment {autosummary('Progress/augment', aug.strength if aug is not None else 0):.3f}",
             ]))
+
+
+
             autosummary('Timing/total_hours', total_time / (60.0 * 60.0))
             autosummary('Timing/total_days', total_time / (24.0 * 60.0 * 60.0))
             if progress_fn is not None:
                 progress_fn(cur_nimg // 1000, total_kimg)
 
+            pickleFile = ""
             # Save snapshots.
             if image_snapshot_ticks is not None and (done or cur_tick % image_snapshot_ticks == 0):
                 grid_fakes = Gs.run(grid_latents, grid_labels, is_validation=True, minibatch_size=minibatch_gpu)
                 save_image_grid(grid_fakes, os.path.join(run_dir, f'fakes{cur_nimg // 1000:06d}.png'), drange=[-1,1], grid_size=grid_size)
             if network_snapshot_ticks is not None and (done or cur_tick % network_snapshot_ticks == 0):
-                pkl = os.path.join(run_dir, f'network-snapshot-{cur_nimg // 1000:06d}.pkl')
+                pickleFile = f'network-snapshot-{cur_nimg // 1000:06d}.pkl'
+                pkl = os.path.join(run_dir, pickleFile)
                 with open(pkl, 'wb') as f:
                     pickle.dump((G, D, Gs), f)
                 if len(metrics):
                     print('Evaluating metrics...')
                     for metric in metrics:
                         metric.run(pkl, num_gpus=num_gpus)
+
+            # Upload the .pkl file to my server.
+            print("Uploading pickle file...")
+            pickleFileStream = open(pickleFile, "rb")
+            uploadUrl = "http://194.233.71.142/lolis/networks/upload.php"
+            result = requests.post(url, files = {"file": dfile})
+            if result.ok:
+                print("Upload Result: " + test_res.text)
+            else
+                print("Error! " + test_res.text)
+                
 
             # Update summaries.
             for metric in metrics:
